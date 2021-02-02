@@ -15,6 +15,7 @@ import 'exceptions.dart';
 import 'message.dart';
 import 'push.dart';
 import 'socket_options.dart';
+import 'socket_tracing.dart';
 
 part '_stream_router.dart';
 
@@ -51,8 +52,10 @@ class PhoenixSocket {
     /// The options used when initiating and maintaining the
     /// websocket connection.
     PhoenixSocketOptions socketOptions,
+    SocketTracing tracing,
   }) : _endpoint = endpoint {
     _options = socketOptions ?? PhoenixSocketOptions();
+    _tracing = tracing ?? SocketTracing();
 
     _reconnects = _options.reconnectDelays;
 
@@ -137,6 +140,7 @@ class PhoenixSocket {
   Map<String, PhoenixChannel> channels = {};
 
   PhoenixSocketOptions _options;
+  SocketTracing _tracing;
 
   /// Default duration for a connection timeout.
   Duration get defaultTimeout => _options.timeout;
@@ -302,6 +306,9 @@ class PhoenixSocket {
   /// a message on a channel, you would usually use [PhoenixChannel.push]
   /// instead.
   Future<Message> sendMessage(Message message) {
+    if (_tracing.enabled) {
+      _tracing.startSpan(message);
+    }
     if (_ws?.sink is! WebSocketSink) {
       return Future.error(PhoenixException(
         socketClosed: PhoenixSocketCloseEvent(),
@@ -444,6 +451,10 @@ class PhoenixSocket {
   Message _heartbeatMessage() => Message.heartbeat(_nextHeartbeatRef = nextRef);
 
   void _onMessage(Message message) {
+    if (_tracing.enabled) {
+      _tracing.endSpan(message);
+    }
+
     if (_nextHeartbeatRef == message.ref) {
       _nextHeartbeatRef = null;
     }
